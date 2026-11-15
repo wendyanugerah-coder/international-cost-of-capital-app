@@ -230,11 +230,11 @@ def calculate(beta_u, tax_pct, erp_pct, debt_pct, us_y_pct, local_y_pct, spread_
         raise ValueError('Invalid tax, debt share, yield or spread')
     t,e,d,yu,yf,s=[x/100 for x in (tax_pct,erp_pct,debt_pct,us_y_pct,local_y_pct,spread_pct)]
     beta_l=beta_u*(1+(1-t)*d/(1-d))
-    # Provisional currency translation of the USD debt gross return.
-    # The assignment references separate class formulas; verify this choice.
+    # Currency translation following CasePacket2026 Part 9, slides 583–584.
     auto=s*(1+yf)/(1+yu)
     sf=auto if foreign_override_pct is None else foreign_override_pct/100
-    keu,kef=yu+beta_l*e,yf+beta_l*e
+    keu=yu+beta_l*e
+    kef=(1+keu)*(1+yf)/(1+yu)-1
     kdu,kdf=yu+s,yf+sf
     wu,wf=(1-d)*keu+d*kdu*(1-t),(1-d)*kef+d*kdf*(1-t)
     return {'levered_beta':beta_l,'foreign_spread_auto_pct':100*auto,'foreign_spread_used_pct':100*sf,'usd_equity_pct':100*keu,'local_equity_pct':100*kef,'usd_debt_pct':100*kdu,'local_debt_pct':100*kdf,'usd_after_tax_debt_pct':100*kdu*(1-t),'local_after_tax_debt_pct':100*kdf*(1-t),'usd_wacc_pct':100*wu,'local_wacc_pct':100*wf}
@@ -282,7 +282,7 @@ def run():
     us_tax=taxes.get('USA',metadata(None,OECD_DATA,'Unavailable',status='Unavailable'))
     local_tax=taxes.get(code,metadata(None,OECD_DATA,'Unavailable',status='Unavailable'))
     beta_rec={**beta_info,'value':betas[industry]}
-    st.info('Class formulas were not supplied with the assignment. The displayed model uses Hamada beta, CAPM, and a gross-yield currency conversion for the automatic local BBB spread. Verify these against your lecture notes before submitting.')
+    st.info('Model follows CasePacket2026 Part 9, slides 579–585: relevered beta, USD CAPM, gross-rate currency conversion of equity and borrowing costs, and shared-tax WACC.')
     if any([beta_err,spread_err,tax_err,bond_err,us_err,local_err]):
         st.warning('One or more live requests failed or used a fallback. Inspect Data sources and use verified manual inputs if needed. Dated reference values are not live quotes.')
     st.subheader('Source inputs and manual overrides')
@@ -334,9 +334,10 @@ def run():
     st.dataframe(pd.DataFrame(rows),hide_index=True,use_container_width=True)
     with st.expander('Formulas and assumptions',expanded=True):
         st.latex(r'\beta_L=\beta_U[1+(1-T)D/E],\quad D/E=d/(1-d)')
-        st.latex(r'k_{e,c}=y_c+\beta_L ERP,\quad k_{d,c}=y_c+s_c')
+        st.latex(r'k_{e,USD}=y_{USD}+\beta_L ERP,\quad k_{e,f}=(1+k_{e,USD})\frac{1+y_f}{1+y_{USD}}-1')
+        st.latex(r'k_{d,c}=y_c+s_c')
         st.latex(r's_f=s_{USD}\frac{1+y_f}{1+y_{USD}},\quad WACC_c=(1-d)k_{e,c}+d k_{d,c}(1-T)')
-        st.write('Rates are nominal annual rates; the same project tax, financing weights and ERP apply to both currencies. The government yield is a proxy, not necessarily a default-free rate. The spread conversion assumes the gross government-yield ratio proxies currency adjustment. It is not a directly observed local BBB spread. No separate country-risk premium is added. Compare the provisional formulas with class notes.')
+        st.write('Rates are nominal annual rates; the same project tax, financing weights and ERP apply to both currencies. The government yield is a proxy, not necessarily a default-free rate. The spread conversion assumes the gross government-yield ratio proxies currency adjustment. It is not a directly observed local BBB spread. No separate country-risk premium is added. The currency conversion follows equal real rates and relative PPP as in the class example (slides 564–569 and 583–585).')
     base={'industry':industry,'country':country,'country_iso3':code,'target_currency':currency,'unlevered_beta':bu,'tax_pct':project_tax,'tax_choice':tax_choice,'tax_status':project_status,'erp_pct':erp,'debt_share_pct':debt,'us_yield_pct':yu,'local_yield_pct':yf,'usd_spread_pct':sp,'foreign_spread_override':override,'beta_status':bu_status,'us_yield_status':yu_status,'local_yield_status':yf_status,'usd_spread_status':sp_status,'calculated_utc':now()}
     st.download_button('Download selected project CSV',pd.DataFrame([{**base,**result}]).to_csv(index=False),'project_cost_of_capital.csv','text/csv')
     st.subheader('All-industry comparison')
